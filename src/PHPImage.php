@@ -123,6 +123,20 @@ class PHPImage {
 	protected $strokeColor = array(0, 0, 0);
 
 	/**
+	 * Global shadow colour
+	 *
+	 * @var array
+	 */
+	protected $shadowColor = array(0, 0, 0);
+
+	/**
+	 * Global shadow distance
+	 *
+	 * @var array
+	 */
+	protected $shadowDistance = 3;
+
+	/**
 	 * Canvas width
 	 *
 	 * @var integer
@@ -758,6 +772,18 @@ class PHPImage {
 	}
 
 	/**
+	 * Load an image from file
+	 *
+	 * @param String $file
+	 * @return $this
+	 */
+	public function load($file){
+	    $this->img->setDimensionsFromImage($file);
+	    $this->img->draw($file);
+	    return $this;
+	}
+
+	/**
 	 * Draw an image from file
 	 *
 	 * Accepts x/y properties from CSS background-position (left, center, right, top, bottom, percentage and pixels)
@@ -834,6 +860,57 @@ class PHPImage {
 		}
 	}
 
+	private function imagettftextblur(&$image,$size,$angle,$x,$y,$color,$fontfile,$text,$blur_intensity = null)
+	{
+		$blur_intensity = !is_null($blur_intensity) && is_numeric($blur_intensity) ? (int)$blur_intensity : 0;
+		if ($blur_intensity > 0)
+		{
+			$text_shadow_image = imagecreatetruecolor(imagesx($image),imagesy($image));
+			imagefill($text_shadow_image,0,0,imagecolorallocate($text_shadow_image,0x00,0x00,0x00));
+			imagettftext($text_shadow_image,$size,$angle,$x,$y,imagecolorallocate($text_shadow_image,0xFF,0xFF,0xFF),$fontfile,$text);
+			for ($blur = 1;$blur <= $blur_intensity;$blur++)
+				imagefilter($text_shadow_image,IMG_FILTER_GAUSSIAN_BLUR);
+			for ($x_offset = 0;$x_offset < imagesx($text_shadow_image);$x_offset++)
+			{
+				for ($y_offset = 0;$y_offset < imagesy($text_shadow_image);$y_offset++)
+				{
+					$visibility = (imagecolorat($text_shadow_image,$x_offset,$y_offset) & 0xFF) / 255;
+					if ($visibility > 0)
+						imagesetpixel($image,$x_offset,$y_offset,imagecolorallocatealpha($image,($color >> 16) & 0xFF,($color >> 8) & 0xFF,$color & 0xFF,(1 - $visibility) * 127));
+				}
+			}
+			imagedestroy($text_shadow_image);
+		}
+		else
+			return imagettftext($image,$size,$angle,$x,$y,$color,$fontfile,$text);
+	}
+
+	/**
+	 * Returns text width
+	 *
+	 * @param integer $fontSize
+	 * @param string $fontFile
+	 * @param string $text
+	 * @return integer
+	 */
+	public function getTextWidth($fontSize, $fontFile, $text){
+		$text_box = imageftbbox($fontSize, 0, $fontFile, $text);
+		return $text_box[4] - $text_box[0];
+	}
+
+	/**
+	 * Returns text height
+	 *
+	 * @param integer $fontSize
+	 * @param string $fontFile
+	 * @param string $text
+	 * @return integer
+	 */
+	public function getTextHeight($fontSize, $fontFile, $text){
+		$text_box = imageftbbox($fontSize, 0, $fontFile, $text);
+		return abs($text_box[3] - $text_box[5]);
+	}
+
 	/**
 	 * Draw text
 	 *
@@ -862,21 +939,23 @@ class PHPImage {
 			}
 		}
 		$defaults = array(
-			'fontSize' => $this->fontSize,
-			'fontColor' => $this->textColor,
-			'opacity' => $this->textOpacity,
-			'x' => 0,
-			'y' => 0,
-			'width' => null,
-			'height' => null,
+			'fontSize'        => $this->fontSize,
+			'fontColor'       => $this->textColor,
+			'opacity'         => $this->textOpacity,
+			'x'               => 0,
+			'y'               => 0,
+			'width'           => null,
+			'height'          => null,
 			'alignHorizontal' => $this->alignHorizontal,
-			'alignVertical' => $this->alignVertical,
-			'angle' => $this->textAngle,
-			'strokeWidth' => $this->strokeWidth,
-			'strokeColor' => $this->strokeColor,
-			'fontFile' => $this->fontFile,
-			'autoFit' => true,
-			'debug' => false
+			'alignVertical'   => $this->alignVertical,
+			'angle'           => $this->textAngle,
+			'strokeWidth'     => $this->strokeWidth,
+			'strokeColor'     => $this->strokeColor,
+			'fontFile'        => $this->fontFile,
+			'autoFit'         => true,
+			'shadowColor'     => $this->shadowColor,
+			'shadowDistance'  => $this->shadowDistance,
+			'debug'           => false
 		);
 		extract(array_merge($defaults, $options), EXTR_OVERWRITE);
 		if($fontFile === null){
@@ -919,6 +998,14 @@ class PHPImage {
 					break;
 			}
 		}
+
+		if ($shadowDistance > 0)
+		{
+			$posx = $x + $offsetx + $shadowDistance;
+			$posy = $y + $offsety + $shadowDistance;
+			$this->imagettftextblur($this->img,$fontSize,$angle,$posx, $posy, $shadowColor, $fontFile, $text, 1);
+		}
+
 		// Draw stroke
 		if($strokeWidth > 0){
 			$strokeColor = imagecolorallocatealpha($this->img, $strokeColor[0], $strokeColor[1], $strokeColor[2], (1 - $opacity) * 127);
@@ -1123,6 +1210,28 @@ class PHPImage {
 	 */
 	public function setStrokeColor($colour=array(0, 0, 0)){
 		$this->strokeColor = $colour;
+		return $this;
+	}
+
+	/**
+	 * Set's global shadow colour
+	 *
+	 * @param array $colour
+	 * @return $this
+	 */
+	public function setShadowColor($colour=array(0, 0, 0)){
+		$this->shadowColor = $colour;
+		return $this;
+	}
+
+	/**
+	 * Set's global shadow distance
+	 *
+	 * @param integer $distance
+	 * @return $this
+	 */
+	public function setShadowDistance($distance=3){
+		$this->shadowDistance = $distance;
 		return $this;
 	}
 
