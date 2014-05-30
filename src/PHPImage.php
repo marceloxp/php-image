@@ -34,6 +34,7 @@
  *
  * version 0.1 2013-04-15
  * Initial release
+ * Marcelo XP
  */
 
 class PHPImage {
